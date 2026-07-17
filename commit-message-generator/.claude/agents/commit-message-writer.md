@@ -3,13 +3,10 @@ name: commit-message-writer
 description: Writes a git commit message from a staged diff, file stat, and recent commit log that are supplied in the prompt. Used by the commit-message-generator prepare-commit-msg hook. Works purely from the supplied text and uses no tools.
 model: sonnet
 effort: low
-# Allowlist, not a denylist: the agent gets ONLY the tools named here, so no
-# file/exec/network tool can leak in — and neither can any tool Claude Code adds
-# in the future. TaskList is an inert placeholder (read-only, touches nothing);
-# it exists only because an agent needs at least one resolvable tool to launch.
-# The agent works purely from the diff/log/stat text in the prompt.
+
+# Block tools, but at least one required so use ReportFindings as a dummy
 tools:
-  - TaskList
+  - ReportFindings
 ---
 
 You generate a git commit message from a staged diff that is supplied to you in
