@@ -11,29 +11,11 @@ import sys
 DEFAULT_MAX_DIFF_CHARS = 12000
 DEFAULT_MAX_BUDGET_USD = "0.50"
 
-# Blocked defensively so Claude answers purely from the diff/log/stat text we
-# hand it instead of poking around the working tree; harmless if a name here
-# doesn't match a real tool in a given Claude Code version.
-BLOCKED_TOOLS = [
-    "Bash", "Read", "Write", "Edit", "NotebookEdit", "Glob", "Grep",
-    "WebFetch", "WebSearch", "Task", "Agent", "Artifact", "SlashCommand",
-]
-
-SYSTEM_PROMPT = """You are generating a git commit message from a staged diff that will be \
-supplied in the next message. Output ONLY the commit message text: no preamble, no \
-explanation, no markdown code fences, no surrounding quotes.
-
-Rules:
-- First line: a concise summary in imperative mood (e.g. "Add", "Fix", "Refactor"). HARD \
-LIMIT of 72 characters, no exceptions - count the characters, and if your first draft is \
-longer, cut it down or move detail into the body instead. No trailing period.
-- Add a blank line then a short body only if the change is non-trivial; use "- " bullet \
-points for the body. Omit the body entirely for small/simple changes.
-- Describe what changed and why, not a line-by-line narration of the diff.
-- Do not invent details the diff doesn't support.
-- If a recent commit log is provided, match its style and tone.
-- Do not use any tools, do not run any commands, do not read any files - everything you \
-need is included in the message you receive."""
+# The commit-message rules live in this subagent, which install_hook.py copies
+# into the target repo's .claude/agents/ so Claude Code discovers it by name;
+# we run the `claude` session *as* that agent rather than duplicating the
+# prompt here. See commit-message-writer.md for the source of truth.
+AGENT_NAME = "commit-message-writer"
 
 USER_PROMPT_TEMPLATE = """Recent commit messages in this repo (newest first, for style reference):
 {recent_log}
@@ -98,11 +80,14 @@ def call_claude(user_prompt, model=None, max_budget_usd=DEFAULT_MAX_BUDGET_USD, 
     if not claude_bin:
         raise RuntimeError("claude CLI not found on PATH. Install Claude Code first.")
 
+    # Run the session *as* the commit-message-writer agent. Claude Code loads
+    # its prompt, model, and tool restrictions from the agent file that
+    # install_hook.py placed in the repo's .claude/agents/; if it can't resolve
+    # the name, `claude` errors and we surface that below.
     cmd = [
         claude_bin, "-p",
         "--output-format", "text",
-        "--append-system-prompt", SYSTEM_PROMPT,
-        "--disallowedTools", ",".join(BLOCKED_TOOLS),
+        "--agent", AGENT_NAME,
         "--no-session-persistence",
         "--max-budget-usd", str(max_budget_usd),
     ]
@@ -110,10 +95,6 @@ def call_claude(user_prompt, model=None, max_budget_usd=DEFAULT_MAX_BUDGET_USD, 
         cmd += ["--model", model]
 
     try:
-        # shell=False (the default) matters here: `claude` resolves to a real
-        # executable, and routing through cmd.exe on Windows (shell=True) would
-        # reparse the command line and truncate --append-system-prompt at its
-        # first embedded newline, silently dropping the rest of the rules.
         result = subprocess.run(
             cmd,
             input=user_prompt,
