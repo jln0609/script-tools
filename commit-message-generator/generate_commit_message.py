@@ -33,6 +33,8 @@ def run_git(args, cwd):
         ["git", "-C", cwd] + args,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
     )
     if result.returncode != 0:
         raise RuntimeError("git {} failed: {}".format(" ".join(args), result.stderr.strip()))
@@ -100,6 +102,8 @@ def call_claude(user_prompt, model=None, max_budget_usd=DEFAULT_MAX_BUDGET_USD, 
             input=user_prompt,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=timeout,
         )
     except subprocess.TimeoutExpired:
@@ -134,6 +138,15 @@ def write_commit_msg_file(path, message):
 
 
 def main():
+    # git and claude both emit UTF-8, but on Windows the default console/pipe
+    # encoding is cp1252, so printing a diff- or message-derived string that
+    # contains e.g. an em dash or arrow would raise UnicodeEncodeError. Force
+    # UTF-8 on our own IO so the print paths below can't crash the hook.
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure:
+            reconfigure(encoding="utf-8", errors="replace")
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo", default=os.getcwd(), help="Path inside the git repo (default: cwd)")
     parser.add_argument("--file", help="Write the message into this file instead of stdout (used by the prepare-commit-msg hook)")
