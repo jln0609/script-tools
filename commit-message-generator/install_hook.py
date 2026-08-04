@@ -37,8 +37,11 @@ GENERATOR="{generator_path}"
 
 if command -v python3 >/dev/null 2>&1; then
   PY=python3
-else
+elif command -v python >/dev/null 2>&1; then
   PY=python
+else
+  echo "commit-message-generator: no python3/python on PATH, skipping message generation" >&2
+  exit 0
 fi
 
 # Never block a commit if generation fails (no `claude` on PATH, network down, etc.) -
